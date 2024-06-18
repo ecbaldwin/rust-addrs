@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-pub trait Address: Eq {
+pub trait Address: Eq + std::str::FromStr {
     const BITS: u8 = 32;
 }
 
@@ -33,5 +33,11 @@ mod tests {
     #[test]
     fn address_size() {
         assert_eq!(32u8, <Ipv4Addr as Address>::BITS);
+    }
+
+    #[test]
+    fn address_from_string() {
+        let ip: Ipv4Addr = "10.224.24.1".parse().expect("bad ip");
+        assert_eq!(Ipv4Addr::from(0x0ae01801), ip);
     }
 }
