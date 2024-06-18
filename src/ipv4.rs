@@ -1,6 +1,8 @@
 use std::net::Ipv4Addr;
 
-pub trait Address: Eq {}
+pub trait Address: Eq {
+    const BITS: u8 = 32;
+}
 
 impl Address for Ipv4Addr {}
 
@@ -27,4 +29,9 @@ mod tests {
         all_ones_eq("255.255.255.255", "255.255.255.255", true);
         extrames("0.0.0.0", "255.255.255.255", false);
     } }
+
+    #[test]
+    fn address_size() {
+        assert_eq!(32u8, <Ipv4Addr as Address>::BITS);
+    }
 }
