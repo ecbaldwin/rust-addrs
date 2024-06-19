@@ -15,4 +15,5 @@
 //! [goaddrs]: https://pkg.go.dev/gopkg.in/addrs.v1
 //! [gonet]: https://pkg.go.dev/net#IP
 
+pub mod errors;
 pub mod ipv4;

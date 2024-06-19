@@ -1,5 +1,7 @@
 use std::net::Ipv4Addr;
 
+use crate::errors::{Error, Result};
+
 /// Defines minimum requirements of an ipv4 address for this crate
 ///
 /// The purpose of this trait is not to replace nor even add to [`Ipv4Addr`]. It is well thought
@@ -21,6 +23,9 @@ pub trait Address:
     + From<[u8; 4]>
     + std::string::ToString
     + std::str::FromStr
+    + std::ops::BitAnd<Output = Self>
+    + std::ops::BitOr<Output = Self>
+    + std::ops::Not<Output = Self>
     + Copy
     + Clone
     + Send
@@ -33,3 +38,369 @@ pub trait Address:
 }
 
 impl Address for Ipv4Addr {}
+
+/// Defines minimum requirements of an ipv4 prefix for this crate and provides implementations of
+/// new methods.
+///
+/// A prefix -- otherwise commonly referred to as a subnet, network, or CIDR -- combines an address
+/// with a prefix length to create a set of IP addresses which can be trivially matched in software
+/// or hardware with simple bitwise integer operations. Once matched, the addresses belonging to
+/// the set can be handled in a common way. This is basis for forwarding packets on the internet.
+///
+/// The Rust standard library does not provide an implementation. However, [`ipnet::Ipv4Net`]
+/// appears to have some popularity in other network related crates. Therefore, an implementation
+/// of this trait is provided for it and it is used in a basic set of integration tests. Many of
+/// the required and provided methods are similar to ones it provides but the semantics were
+/// different enough from what I wanted that I reimplemented them with trivial wrappers.
+pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
+    /// the type of IP address associated with this prefix
+    type Address: Address;
+
+    /// returns the address part of the Prefix, including host bits
+    fn address(&self) -> Self::Address;
+    /// returns the prefix length which is the number of leading 1s in the netmask
+    fn length(&self) -> u8;
+
+    /// returns a new Prefix without checking length for when I know what I'm doing
+    unsafe fn unsafe_new(ip: Self::Address, length: u8) -> Self;
+
+    /// returns the prefix for the given address combined with the given prefix length. If the
+    /// length is greater than 32 then [`Error::InvalidLength`] is returned.
+    fn from_address_length(ip: Self::Address, length: u8) -> Result<Self> {
+        match length {
+            length if length < 32 => Ok(unsafe { Self::unsafe_new(ip, length) }),
+            _ => Err(Error::InvalidLength),
+        }
+    }
+
+    /// returns the prefix for the given address combined with the given mask. The mask must be an
+    /// instance of [`Address`] where any number of left bits a continuous 1s followed by all 0s.
+    /// If the mask is invalid, [`Error::InvalidMask`] is returned.
+    fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
+        let mask: u32 = mask.into();
+        let length = mask.leading_ones() as u8;
+        match length + mask.trailing_zeros() as u8 {
+            32 => Self::from_address_length(ip, length),
+            _ => Err(Error::InvalidMask),
+        }
+    }
+
+    /// returns a new Address with 1s in the first `length` bits and then 0s representing the
+    /// network mask for this prefix
+    fn mask(&self) -> Self::Address {
+        match self.length() {
+            0 => 0,
+            s => 0xffffffff << Self::Address::BITS - s,
+        }
+        .into()
+    }
+
+    /// returns a new Prefix with all bits after `length` zeroed out so that only the bits in the
+    /// `network` part of the prefix are present. Note that this method ignores special cases where
+    /// a network address doesn't make sense like in a host route or point-to-point prefix (/32 and
+    /// /31). It just does the math.
+    fn network(&self) -> Self {
+        let address = self.address() & self.mask();
+        unsafe { Self::unsafe_new(address, self.length()) }
+    }
+
+    /// returns a new Prefix with the first `length` bits zeroed out so that only the bits in the
+    /// `host` part of the prefix are present
+    fn host(&self) -> Self {
+        let address = self.address() & !self.mask();
+        unsafe { Self::unsafe_new(address, self.length()) }
+    }
+
+    /// returns a new Prefix with all bits after `length` set to 1s. Note that this method ignores
+    /// special cases where a broadcast address doesn't make sense like in a host route or
+    /// point-to-point prefix (/32 and /31). It just does the math
+    fn broadcast(&self) -> Self {
+        let address = self.address() | !self.mask();
+        unsafe { Self::unsafe_new(address, self.length()) }
+    }
+
+    /// returns the number of addresses in the prefix, including network and broadcast addresses.
+    /// It ignores any bits set in the host part of the address. In the case of 0 prefix length, it
+    /// returns [`Error::TooMany`].
+    fn num_addresses(&self) -> Result<u32> {
+        self.num_prefixes(32)
+    }
+
+    /// returns the number of prefixes of the given length contained in this prefix. It ignores any
+    /// bits set in the host part of the address. If the number would overflow a [`u32`] it returns
+    /// [`Error::TooMany`].
+    fn num_prefixes(&self, length: u8) -> Result<u32> {
+        match length {
+            length if length < self.length() => Ok(0),
+            length if 32 < length => Err(Error::InvalidLength),
+            length => {
+                let p = (length - self.length()).into();
+                match 2u32.checked_pow(p) {
+                    Some(c) => Ok(c),
+                    None => Err(Error::TooMany),
+                }
+            }
+        }
+    }
+
+    /// returns two prefixes which divide this prefix into two equal halves. If the prefix is a
+    /// host route (/32), then None is returned.
+    fn halves(&self) -> Option<(Self, Self)> {
+        match self.length() {
+            length if length < 32 => {
+                let left = self.network().address().into();
+                let right = left | (0x80000000 >> length);
+                Some((
+                    unsafe { Self::unsafe_new(left.into(), length + 1) },
+                    unsafe { Self::unsafe_new(right.into(), length + 1) },
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    /// returns true if the given containee is wholly contained within this Prefix. If the two
+    /// Prefixes are equal, true is returned. The host bits in the address are ignored when testing
+    /// containership.
+    fn contains<P: Prefix>(&self, other: &P) -> bool {
+        use prefix_private::Cmp;
+        let (ord, _, _, _) = self.cmp(other);
+        match ord {
+            prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
+            _ => false,
+        }
+    }
+}
+
+// https://stackoverflow.com/questions/53204327/how-to-have-a-private-part-of-a-trait
+mod prefix_private {
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Child {
+        Left,
+        Right,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum PrefixOrd {
+        Same,
+        Contains,
+        IsContained,
+        Disjoint,
+    }
+
+    pub trait Cmp<P: super::Prefix> {
+        fn containership(&self, longer: &P) -> (PrefixOrd, u8, Option<Child>);
+        fn cmp(&self, b: &P) -> (PrefixOrd, bool, u8, Option<Child>);
+    }
+}
+
+use prefix_private::{Child, Cmp, PrefixOrd};
+
+impl<P, T> Cmp<T> for P
+where
+    P: Prefix,
+    T: Prefix,
+{
+    // helper which compares to see if self contains the longer prefix.
+    //
+    // It assumes that self.length() <= longer.length(). Otherwise, the behavior is undefined.
+    //
+    // `ord`:    how self relates to the longer prefix (Same, Contains, Disjoint).
+    //           since self is shorter than longer, IsContained is not possible.
+    // `common`: number of leading bits that are equal in the two up to the shorter mask length.
+    // `child`:  tells whether the first non-common bit in `longer` is a 0 (left) or 1 (right).
+    //           It is only relevant if `exact` is false.
+    //
+    //  The following table describes how to interpret results:
+    //
+    // | ord      | common | child | note
+    // |----------|--------|-------|-------
+    // | Disjoint | 0..31  | Left  | the two are disjoint and `longer` compares less than `shorter`
+    // | Disjoint | 0..31  | Right | the two are disjoint and `longer` compares greater than `shorter`
+    // | Contains | 0..31  | Left  | `longer` should be `shorter`'s left child
+    // | Contains | 0..31  | Right | `longer` should be `shorter`'s right child
+    // | Same     | 0..32  | None  | `shorter` and `longer` are the same prefix
+    fn containership(&self, longer: &T) -> (PrefixOrd, u8, Option<Child>) {
+        // Note: there are three reasons to convert addresses into u32 here:
+        // 1. The bitwise operarations on a u32 are more natural than on [u8; 4].
+        // 2. Masking both with one mask doesn't work since they could be different types and
+        //    therefore the & operator doesn't apply. I think this could be fixed but it might not
+        //    be any better optimized.
+        // 3. The xor operator is used to diff the two and I'm not certain I want to make that a
+        //    requirement of an Address, let alone between two types of address.
+        let (short, long) = (self.address().into(), longer.address().into());
+
+        let common = std::cmp::min(self.length(), (short ^ long).leading_zeros() as u8);
+        let ord = match self.length() <= common {
+            false => PrefixOrd::Disjoint,
+            true => match self.length() == longer.length() {
+                true => PrefixOrd::Same,
+                false => PrefixOrd::Contains,
+            },
+        };
+        let child = match ord {
+            PrefixOrd::Same | PrefixOrd::IsContained => None,
+            _ => Some({
+                let pivot_mask: u32 = 0x80000000u32 >> common;
+                match pivot_mask & long == 0 {
+                    true => Child::Left,
+                    false => Child::Right,
+                }
+            }),
+        };
+        (ord, common, child)
+    }
+
+    fn cmp(&self, other: &T) -> (PrefixOrd, bool, u8, Option<Child>) {
+        let (reversed, (ord, common, child)) = match other.length() < self.length() {
+            true => (true, other.containership(self)),
+            false => (false, self.containership(other)),
+        };
+        let ord = match reversed && ord == PrefixOrd::Contains {
+            true => PrefixOrd::IsContained,
+            false => ord,
+        };
+        (ord, reversed, common, child)
+    }
+}
+
+impl Prefix for ipnet::Ipv4Net {
+    type Address = Ipv4Addr;
+
+    fn address(&self) -> Self::Address {
+        self.addr()
+    }
+    fn length(&self) -> u8 {
+        self.prefix_len()
+    }
+
+    unsafe fn unsafe_new(ip: Self::Address, length: u8) -> Self {
+        Self::new(ip, length).unwrap()
+    }
+}
+
+impl<T> Prefix for T
+where
+    T: Address,
+{
+    type Address = T;
+
+    fn address(&self) -> Self::Address {
+        *self
+    }
+    fn length(&self) -> u8 {
+        32
+    }
+
+    unsafe fn unsafe_new(ip: Self::Address, _length: u8) -> Self {
+        ip
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::prefix_private::{Child, Cmp, PrefixOrd};
+    use super::*;
+
+    fn cmp(
+        a: util::Prefix,
+        b: util::Prefix,
+        expected_ord: PrefixOrd,
+        expected_common: u8,
+        expected_child: Option<Child>,
+    ) {
+        let (ord, common, child) = Cmp::containership(&a, &b);
+        assert_eq!(expected_ord, ord);
+        assert_eq!(expected_common, common);
+        assert_eq!(expected_child, child);
+
+        // compare forward
+        let (ord, reversed, common, child) = Cmp::cmp(&a, &b);
+        assert!(!reversed);
+        assert_eq!(expected_common, common);
+        assert_eq!(expected_child, child);
+        assert_eq!(expected_ord, ord);
+
+        // compare reversed
+        let (ord, reversed, common_, _) = Cmp::cmp(&b, &a);
+        assert_eq!(a.length() != b.length(), reversed);
+        assert_eq!(expected_common, common_);
+        let expected_ord = match expected_ord {
+            PrefixOrd::Contains => PrefixOrd::IsContained,
+            PrefixOrd::IsContained => PrefixOrd::Contains,
+            _ => expected_ord,
+        };
+        assert_eq!(expected_ord, ord);
+    }
+
+    util::tests! { cmp {
+        trivial(
+            util::p("0.0.0.0/0"),
+            util::p("0.0.0.0/0"),
+            PrefixOrd::Same, 0, None);
+        exact(
+            util::p("10.0.0.0/16"),
+            util::p("10.0.0.0/16"),
+            PrefixOrd::Same, 16, None);
+        exact_partial(
+            util::p("10.0.0.0/19"),
+            util::p("10.0.31.0/19"),
+            PrefixOrd::Same, 19, None);
+        empty_prefix_match(
+            util::p("0.0.0.0/0"),
+            util::p("10.10.0.0/16"),
+            PrefixOrd::Contains, 0, Some(Child::Left));
+        empty_prefix_match_backwards(
+            util::p("0.0.0.0/0"),
+            util::p("130.10.0.0/16"),
+            PrefixOrd::Contains, 0, Some(Child::Right));
+        matches(
+            util::p("10.0.0.0/8"),
+            util::p("10.10.0.0/16"),
+            PrefixOrd::Contains, 8, Some(Child::Left));
+        matches_partial(
+            util::p("10.200.0.0/9"),
+            util::p("10.129.0.0/16"),
+            PrefixOrd::Contains, 9, Some(Child::Left));
+        matches_backwards(
+            util::p("10.0.0.0/8"),
+            util::p("10.200.0.0/16"),
+            PrefixOrd::Contains, 8, Some(Child::Right));
+        matches_backwards_partial(
+            util::p("10.240.0.0/9"),
+            util::p("10.200.0.0/16"),
+            PrefixOrd::Contains, 9, Some(Child::Right));
+        disjoint(
+            util::p("0.0.0.0/1"),
+            util::p("128.0.0.0/1"),
+            PrefixOrd::Disjoint, 0, Some(Child::Right));
+        disjoint_longer(
+            util::p("0.0.0.0/17"),
+            util::p("0.0.128.0/17"),
+            PrefixOrd::Disjoint, 16, Some(Child::Right));
+        disjoint_longer_partial(
+            util::p("0.0.0.0/17"),
+            util::p("0.1.0.0/17"),
+            PrefixOrd::Disjoint, 15, Some(Child::Right));
+        disjoint_backwards(
+            util::p("128.0.0.0/1"),
+            util::p("0.0.0.0/1"),
+            PrefixOrd::Disjoint, 0, Some(Child::Left));
+        disjoint_backwards_longer(
+            util::p("0.0.128.0/19"),
+            util::p("0.0.0.0/19"),
+            PrefixOrd::Disjoint, 16, Some(Child::Left));
+        disjoint_backwards_longer_partial(
+            util::p("0.1.0.0/19"),
+            util::p("0.0.0.0/19"),
+            PrefixOrd::Disjoint, 15, Some(Child::Left));
+        disjoint_with_common(
+            util::p("10.0.0.0/16"),
+            util::p("10.10.0.0/16"),
+            PrefixOrd::Disjoint, 12, Some(Child::Right));
+        disjoint_with_more_disjoint_bytes(
+            util::p("0.255.255.0/24"),
+            util::p("128.0.0.0/24"),
+            PrefixOrd::Disjoint, 0, Some(Child::Right));
+    } }
+}

@@ -2,4 +2,5 @@
 name = "util"
 
 [dependencies]
+ipnet = "2.9.0"
 paste = "1.0.15"
