@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ipnet = "2.9.0"
 
 [dev-dependencies]
 paste = "1.0.15"
+util = { path = "util" }
