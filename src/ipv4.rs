@@ -1,6 +1,16 @@
 use std::net::Ipv4Addr;
 
-pub trait Address: Eq + std::str::FromStr {
+pub trait Address:
+    Eq
+    + From<u32>
+    + Into<u32>
+    + From<[u8; 4]>
+    // I'm not sure how to handle this. Ipv4 has `octets` which I use implicitly
+    // + Into<[u8; 4]>
+    + std::string::ToString
+    + std::str::FromStr
+    + Copy + Clone + Send + Sized + Sync + Unpin
+{
     const BITS: u8 = 32;
 }
 
@@ -8,9 +18,11 @@ impl Address for Ipv4Addr {}
 
 #[cfg(test)]
 mod tests {
+    type AddressImpl = Ipv4Addr;
+
     use super::*;
 
-    fn _ipv4_addr(s: &str) -> Ipv4Addr {
+    fn _ipv4_addr(s: &str) -> AddressImpl {
         s.parse().expect("bad ip")
     }
 
@@ -32,12 +44,36 @@ mod tests {
 
     #[test]
     fn address_size() {
-        assert_eq!(32u8, <Ipv4Addr as Address>::BITS);
+        assert_eq!(32u8, <AddressImpl as Address>::BITS);
     }
 
     #[test]
     fn address_from_string() {
-        let ip: Ipv4Addr = "10.224.24.1".parse().expect("bad ip");
-        assert_eq!(Ipv4Addr::from(0x0ae01801), ip);
+        let ip: AddressImpl = "10.224.24.1".parse().expect("bad ip");
+        assert_eq!(AddressImpl::from(0x0ae01801), ip);
+    }
+
+    #[test]
+    fn address_from_bytes() {
+        let ip: AddressImpl = [10, 224, 24, 1].into();
+        assert_eq!(AddressImpl::from(0x0ae01801u32), ip);
+    }
+
+    #[test]
+    fn address_to_u32() {
+        let ip: AddressImpl = [10, 224, 24, 1].into();
+        assert_eq!(0x0ae01801u32, ip.into());
+    }
+
+    #[test]
+    fn address_to_string() {
+        let ip: AddressImpl = [10, 224, 24, 1].into();
+        assert_eq!("10.224.24.1", ip.to_string());
+    }
+
+    #[test]
+    fn address_to_octets() {
+        let ip: AddressImpl = [10, 224, 24, 1].into();
+        assert_eq!([10, 224, 24, 1], ip.octets());
     }
 }
