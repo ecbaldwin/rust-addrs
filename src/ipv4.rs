@@ -79,7 +79,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// length is greater than 32 then [`Error::InvalidLength`] is returned.
     fn from_address_length(ip: Self::Address, length: u8) -> Result<Self> {
         match length {
-            length if length < 32 => Ok(unsafe { Self::unsafe_new(ip, length) }),
+            length if length < Self::Address::BITS => Ok(unsafe { Self::unsafe_new(ip, length) }),
             _ => Err(Error::InvalidLength),
         }
     }
@@ -90,9 +90,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
         let mask: u32 = mask.into();
         let length = mask.leading_ones() as u8;
-        match length + mask.trailing_zeros() as u8 {
-            32 => Self::from_address_length(ip, length),
-            _ => Err(Error::InvalidMask),
+        match length + mask.trailing_zeros() as u8 == Self::Address::BITS {
+            true => Ok(unsafe { Self::unsafe_new(ip, length) }),
+            false => Err(Error::InvalidMask),
         }
     }
 
@@ -134,7 +134,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// It ignores any bits set in the host part of the address. In the case of 0 prefix length, it
     /// returns [`Error::TooMany`].
     fn num_addresses(&self) -> Result<u32> {
-        self.num_prefixes(32)
+        self.num_prefixes(Self::Address::BITS)
     }
 
     /// returns the number of prefixes of the given length contained in this prefix. It ignores any
@@ -143,7 +143,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     fn num_prefixes(&self, length: u8) -> Result<u32> {
         match length {
             length if length < self.length() => Ok(0),
-            length if 32 < length => Err(Error::InvalidLength),
+            length if Self::Address::BITS < length => Err(Error::InvalidLength),
             length => {
                 let p = (length - self.length()).into();
                 match 2u32.checked_pow(p) {
@@ -158,7 +158,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// host route (/32), then None is returned.
     fn halves(&self) -> Option<(Self, Self)> {
         match self.length() {
-            length if length < 32 => {
+            length if length < Self::Address::BITS => {
                 let left = self.network().address().into();
                 let right = left | (0x80000000 >> length);
                 Some((
@@ -302,7 +302,7 @@ where
         *self
     }
     fn length(&self) -> u8 {
-        32
+        Self::BITS
     }
 
     unsafe fn unsafe_new(ip: Self::Address, _length: u8) -> Self {
