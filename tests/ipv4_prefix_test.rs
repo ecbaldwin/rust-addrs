@@ -1,11 +1,17 @@
 use addrs::errors::Result;
-use addrs::ipv4::{self, Prefix};
+use addrs::ipv4::{self, Address, Prefix};
 
 #[test]
 fn test_u32() {
     let prefix = util::p("10.224.24.1/24");
     assert_eq!(0x0ae01801u32, prefix.address().into());
     assert_eq!(0xffffff00u32, prefix.mask().into());
+}
+
+#[test]
+fn octets() {
+    let address = util::a("1.2.3.4");
+    assert_eq!([1, 2, 3, 4], Address::octets(&address));
 }
 
 fn prefix_addr_len(prefix: util::Prefix, address: util::Address, mask: util::Address, len: u8) {

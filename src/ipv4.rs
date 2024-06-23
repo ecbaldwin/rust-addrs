@@ -15,12 +15,13 @@ use crate::errors::{Error, Result};
 /// This trait also servers to limit the touch points this crate has on that type.
 ///
 /// [^1]: One minor exception is that I wish it implemented Into<[u8; 4]>. There is
-/// [`Ipv4Addr::octets`] but I cannot make that a formal requirement of this trait.
+/// [`Ipv4Addr::octets`] but it is more awkward.
 pub trait Address:
     Eq
     + From<u32>
     + Into<u32>
     + From<[u8; 4]>
+//     + Into<[u8; 4]>
     + std::string::ToString
     + std::str::FromStr
     + std::ops::BitAnd<Output = Self>
@@ -35,9 +36,15 @@ pub trait Address:
 {
     /// formalize that all v4 address are 32 bits
     const BITS: u8 = 32;
+
+    fn octets(&self) -> [u8; 4];
 }
 
-impl Address for Ipv4Addr {}
+impl Address for Ipv4Addr {
+    fn octets(&self) -> [u8; 4] {
+        self.octets()
+    }
+}
 
 /// Defines minimum requirements of an ipv4 prefix for this crate and provides implementations of
 /// new methods.
