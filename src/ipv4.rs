@@ -228,34 +228,36 @@ where
     // | Contains | 0..31  | Right | `longer` should be `shorter`'s right child
     // | Same     | 0..32  | None  | `shorter` and `longer` are the same prefix
     fn containership(&self, longer: &T) -> (PrefixOrd, u8, Option<Child>) {
-        // Note: there are three reasons to convert addresses into u32 here:
-        // 1. The bitwise operarations on a u32 are more natural than on [u8; 4].
-        // 2. Masking both with one mask doesn't work since they could be different types and
-        //    therefore the & operator doesn't apply. I think this could be fixed but it might not
-        //    be any better optimized.
-        // 3. The xor operator is used to diff the two and I'm not certain I want to make that a
-        //    requirement of an Address, let alone between two types of address.
-        let (short, long) = (self.address().into(), longer.address().into());
+        let (short, long) = (self.address().octets(), longer.address().octets());
 
-        let common = std::cmp::min(self.length(), (short ^ long).leading_zeros() as u8);
-        let ord = match self.length() <= common {
-            false => PrefixOrd::Disjoint,
-            true => match self.length() == longer.length() {
-                true => PrefixOrd::Same,
-                false => PrefixOrd::Contains,
-            },
-        };
-        let child = match ord {
-            PrefixOrd::Same | PrefixOrd::IsContained => None,
-            _ => Some({
-                let pivot_mask: u32 = 0x80000000u32 >> common;
-                match pivot_mask & long == 0 {
+        for i in 0..4 {
+            let offset = (i * 8) as u8;
+            let short_len = self.length() - offset;
+            let common = std::cmp::min(short_len, (short[i] ^ long[i]).leading_zeros() as u8);
+            let ord = match short_len <= common {
+                true => match short_len == longer.length() - offset {
+                    true => break,
+                    false => PrefixOrd::Contains,
+                },
+                false => match common == 8 {
+                    true => continue,
+                    false => PrefixOrd::Disjoint,
+                },
+            };
+            let child = Some({
+                let pivot_bit = match common == 8 {
+                    true => 0x80 & long[i + 1],
+                    false => 0x80 >> common & long[i],
+                };
+                match pivot_bit == 0 {
                     true => Child::Left,
                     false => Child::Right,
                 }
-            }),
-        };
-        (ord, common, child)
+            });
+            return (ord, common + offset, child);
+        }
+
+        (PrefixOrd::Same, self.length(), None)
     }
 
     fn cmp(&self, other: &T) -> (PrefixOrd, bool, u8, Option<Child>) {
