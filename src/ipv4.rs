@@ -41,6 +41,16 @@ pub trait Address:
     ///
     /// in lieu of implementing Into<[u8; 4]>, this allows this crate to easily get at the
     /// underlying byte array.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Address;
+    /// # use std::net::Ipv4Addr;
+    /// fn check<A: Address>(address: A) {
+    ///     assert_eq!([1, 2, 3, 4], address.octets());
+    /// }
+    /// check("1.2.3.4".parse::<Ipv4Addr>().unwrap());
+    /// ```
     fn octets(&self) -> [u8; 4];
 }
 
@@ -68,8 +78,30 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     type Address: Address;
 
     /// returns the address part of the Prefix, including host bits
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("1.2.3.4", prefix.address().to_string());
+    /// }
+    ///
+    /// check("1.2.3.4/24".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn address(&self) -> Self::Address;
     /// returns the prefix length which is the number of leading 1s in the netmask
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!(23, prefix.length());
+    /// }
+    ///
+    /// check("1.2.3.4/23".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn length(&self) -> u8;
 
     /// returns a new Prefix without checking length for when I know what I'm doing
@@ -77,6 +109,19 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
 
     /// returns the prefix for the given address combined with the given prefix length. If the
     /// length is greater than 32 then [`Error::InvalidLength`] is returned.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// # use std::net::Ipv4Addr;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("1.2.3.4/25", prefix.to_string());
+    /// }
+    ///
+    /// let ip = Ipv4Addr::new(1,2,3,4);
+    /// check::<Ipv4Net>(Prefix::from_address_length(ip, 25).unwrap());
+    /// ```
     fn from_address_length(ip: Self::Address, length: u8) -> Result<Self> {
         match length {
             length if length < Self::Address::BITS => Ok(unsafe { Self::unsafe_new(ip, length) }),
@@ -87,6 +132,19 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// returns the prefix for the given address combined with the given mask. The mask must be an
     /// instance of [`Address`] where anywhere from 0 to 32 left-most bits are all 1s followed by
     /// all 0s on the right. If the mask is invalid, [`Error::InvalidMask`] is returned.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// # use std::net::Ipv4Addr;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("8.7.6.5/22", prefix.to_string());
+    /// }
+    ///
+    /// let ip = Ipv4Addr::new(8,7,6,5);
+    /// let mask = Ipv4Addr::new(255,255,252,0);
+    /// check::<Ipv4Net>(Prefix::from_address_mask(ip, mask).unwrap());
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
         let mask: u32 = mask.into();
         let length = mask.leading_ones() as u8;
@@ -98,6 +156,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
 
     /// returns a new Address with 1s in the first `length` bits and then 0s representing the
     /// network mask for this prefix
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("255.255.255.192", prefix.mask().to_string());
+    /// }
+    ///
+    /// check("1.2.3.4/26".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn mask(&self) -> Self::Address {
         match self.length() {
             0 => 0,
@@ -110,6 +179,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// part of the prefix can be non-zero. Note that this method ignores special cases where a
     /// network address might not make sense like in a host route or point-to-point prefix (/32 and
     /// /31). It just does the math.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("1.2.3.192/26", prefix.network().to_string());
+    /// }
+    ///
+    /// check("1.2.3.234/26".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn network(&self) -> Self {
         let address = self.address() & self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
@@ -117,6 +197,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
 
     /// returns a new Prefix with the network bits zeroed out so that only the bits in the
     /// `host` part of the prefix can be non-zero.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("0.0.0.42/26", prefix.host().to_string());
+    /// }
+    ///
+    /// check("1.2.3.234/26".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn host(&self) -> Self {
         let address = self.address() & !self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
@@ -125,6 +216,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// returns a new Prefix with all the host bits set to 1s. Note that this method ignores
     /// special cases where a broadcast address might not make sense like in a host route or
     /// point-to-point prefix (/32 and /31). It just does the math.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!("1.2.3.255/24", prefix.broadcast().to_string());
+    /// }
+    ///
+    /// check("1.2.3.1/24".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn broadcast(&self) -> Self {
         let address = self.address() | !self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
@@ -133,6 +235,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// returns the number of addresses in the prefix, including network and broadcast addresses.
     /// It ignores any bits set in the host part of the address. In the case of 0 prefix length, it
     /// returns [`Error::TooMany`].
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!(128, prefix.num_addresses().unwrap());
+    /// }
+    ///
+    /// check("1.2.3.0/25".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn num_addresses(&self) -> Result<u32> {
         self.num_prefixes(Self::Address::BITS)
     }
@@ -140,6 +253,17 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// returns the number of prefixes of the given length contained in this prefix. It ignores any
     /// bits set in the host part of the address. If the number would overflow a [`u32`] it returns
     /// [`Error::TooMany`]. If >32 is passed for length then [`Error::InvalidLength`] is returned.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// fn check<P: Prefix>(prefix: P) {
+    ///     assert_eq!(4, prefix.num_prefixes(27).unwrap());
+    /// }
+    ///
+    /// check("1.2.3.0/25".parse::<Ipv4Net>().unwrap());
+    /// ```
     fn num_prefixes(&self, length: u8) -> Result<u32> {
         match length {
             length if length < self.length() => Ok(0),
@@ -156,6 +280,16 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
 
     /// returns two prefixes that partition this prefix into two equal halves. If the prefix is a
     /// host route (/32), then None is returned.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// let prefix: Ipv4Net = "1.2.3.0/24".parse().unwrap();
+    /// let (a, b) = prefix.halves().unwrap();
+    /// assert_eq!("1.2.3.0/25", a.to_string());
+    /// assert_eq!("1.2.3.128/25", b.to_string());
+    /// ```
     fn halves(&self) -> Option<(Self, Self)> {
         match self.length() {
             length if length < Self::Address::BITS => {
@@ -173,6 +307,32 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// returns true if the given containee is wholly contained within this Prefix. If the two
     /// Prefixes are equal, true is returned. The host bits in the address are ignored when testing
     /// containership.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::Prefix;
+    /// # use ipnet::Ipv4Net;
+    /// # use std::net::Ipv4Addr;
+    /// fn check_contains<P: Prefix, T: Prefix>(container: P, containee: T) -> bool {
+    ///     container.contains(&containee)
+    /// }
+    ///
+    /// // Contains self
+    /// let net: Ipv4Net = "192.168.0.0/24".parse().unwrap();
+    /// assert!(check_contains(net, net));
+    ///
+    /// // Nets
+    /// let net_yes: Ipv4Net = "192.168.0.0/25".parse().unwrap();
+    /// let net_no: Ipv4Net = "192.168.0.0/23".parse().unwrap();
+    /// assert!(check_contains(net, net_yes));
+    /// assert!(!check_contains(net, net_no));
+    ///
+    /// // IPs
+    /// let ip_yes: Ipv4Addr = "192.168.0.1".parse().unwrap();
+    /// let ip_no: Ipv4Addr = "192.168.1.0".parse().unwrap();
+    /// assert!(check_contains(net, ip_yes));
+    /// assert!(!check_contains(net, ip_no));
+    /// ```
     fn contains<P: Prefix>(&self, other: &P) -> bool {
         use prefix_private::Cmp;
         let (ord, _, _, _) = self.cmp(other);
