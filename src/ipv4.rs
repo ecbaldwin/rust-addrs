@@ -37,6 +37,10 @@ pub trait Address:
     /// formalize that all v4 address are 32 bits
     const BITS: u8 = 32;
 
+    /// returns the bytes of the address in network order
+    ///
+    /// in lieu of implementing Into<[u8; 4]>, this allows this crate to easily get at the
+    /// underlying byte array.
     fn octets(&self) -> [u8; 4];
 }
 
@@ -81,8 +85,8 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     }
 
     /// returns the prefix for the given address combined with the given mask. The mask must be an
-    /// instance of [`Address`] where any number of left bits a continuous 1s followed by all 0s.
-    /// If the mask is invalid, [`Error::InvalidMask`] is returned.
+    /// instance of [`Address`] where anywhere from 0 to 32 left-most bits are all 1s followed by
+    /// all 0s on the right. If the mask is invalid, [`Error::InvalidMask`] is returned.
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
         let mask: u32 = mask.into();
         let length = mask.leading_ones() as u8;
@@ -102,25 +106,25 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
         .into()
     }
 
-    /// returns a new Prefix with all bits after `length` zeroed out so that only the bits in the
-    /// `network` part of the prefix are present. Note that this method ignores special cases where
-    /// a network address doesn't make sense like in a host route or point-to-point prefix (/32 and
+    /// returns a new Prefix with the host bits zeroed out so that only the bits in the `network`
+    /// part of the prefix can be non-zero. Note that this method ignores special cases where a
+    /// network address might not make sense like in a host route or point-to-point prefix (/32 and
     /// /31). It just does the math.
     fn network(&self) -> Self {
         let address = self.address() & self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
     }
 
-    /// returns a new Prefix with the first `length` bits zeroed out so that only the bits in the
-    /// `host` part of the prefix are present
+    /// returns a new Prefix with the network bits zeroed out so that only the bits in the
+    /// `host` part of the prefix can be non-zero.
     fn host(&self) -> Self {
         let address = self.address() & !self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
     }
 
-    /// returns a new Prefix with all bits after `length` set to 1s. Note that this method ignores
-    /// special cases where a broadcast address doesn't make sense like in a host route or
-    /// point-to-point prefix (/32 and /31). It just does the math
+    /// returns a new Prefix with all the host bits set to 1s. Note that this method ignores
+    /// special cases where a broadcast address might not make sense like in a host route or
+    /// point-to-point prefix (/32 and /31). It just does the math.
     fn broadcast(&self) -> Self {
         let address = self.address() | !self.mask();
         unsafe { Self::unsafe_new(address, self.length()) }
@@ -135,7 +139,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
 
     /// returns the number of prefixes of the given length contained in this prefix. It ignores any
     /// bits set in the host part of the address. If the number would overflow a [`u32`] it returns
-    /// [`Error::TooMany`].
+    /// [`Error::TooMany`]. If >32 is passed for length then [`Error::InvalidLength`] is returned.
     fn num_prefixes(&self, length: u8) -> Result<u32> {
         match length {
             length if length < self.length() => Ok(0),
@@ -150,7 +154,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
         }
     }
 
-    /// returns two prefixes which divide this prefix into two equal halves. If the prefix is a
+    /// returns two prefixes that partition this prefix into two equal halves. If the prefix is a
     /// host route (/32), then None is returned.
     fn halves(&self) -> Option<(Self, Self)> {
         match self.length() {

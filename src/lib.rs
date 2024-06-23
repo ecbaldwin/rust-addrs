@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! Provides IP address related types and data structures for the Rust programming language with a
 //! clean and complete API and many nice features. The basic types are opaque, immutable,
 //! comparable, space efficient, and defined as simple structs that don't require extra memory
@@ -15,5 +17,8 @@
 //! [goaddrs]: https://pkg.go.dev/gopkg.in/addrs.v1
 //! [gonet]: https://pkg.go.dev/net#IP
 
+/// custom error types for this crate
 pub mod errors;
+
+/// work with IPv4 address, prefixes, etc.
 pub mod ipv4;
