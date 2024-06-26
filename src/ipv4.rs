@@ -54,7 +54,7 @@ pub trait Address:
     fn octets(&self) -> [u8; 4];
 }
 
-impl Address for Ipv4Addr {
+impl Address for std::net::Ipv4Addr {
     fn octets(&self) -> [u8; 4] {
         self.octets()
     }
@@ -81,26 +81,18 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("1.2.3.4", prefix.address().to_string());
-    /// }
-    ///
-    /// check("1.2.3.4/24".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.4/24".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!("1.2.3.4", prefix.address().to_string());
     /// ```
     fn address(&self) -> Self::Address;
     /// returns the prefix length which is the number of leading 1s in the netmask
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!(23, prefix.length());
-    /// }
-    ///
-    /// check("1.2.3.4/23".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.4/23".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!(23, prefix.length());
     /// ```
     fn length(&self) -> u8;
 
@@ -112,15 +104,11 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
     /// # use std::net::Ipv4Addr;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("1.2.3.4/25", prefix.to_string());
-    /// }
-    ///
     /// let ip = Ipv4Addr::new(1,2,3,4);
-    /// check::<Ipv4Net>(Prefix::from_address_length(ip, 25).unwrap());
+    /// let prefix: Ipv4Prefix = Prefix::from_address_length(ip, 25).unwrap();
+    /// assert_eq!("1.2.3.4/25", prefix.to_string());
     /// ```
     fn from_address_length(ip: Self::Address, length: u8) -> Result<Self> {
         match length {
@@ -135,16 +123,12 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
     /// # use std::net::Ipv4Addr;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("8.7.6.5/22", prefix.to_string());
-    /// }
-    ///
     /// let ip = Ipv4Addr::new(8,7,6,5);
     /// let mask = Ipv4Addr::new(255,255,252,0);
-    /// check::<Ipv4Net>(Prefix::from_address_mask(ip, mask).unwrap());
+    /// let prefix: Ipv4Prefix = Prefix::from_address_mask(ip, mask).unwrap();
+    /// assert_eq!("8.7.6.5/22", prefix.to_string());
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
         let mask: u32 = mask.into();
         let length = mask.leading_ones() as u8;
@@ -154,18 +138,14 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
         }
     }
 
-    /// returns a new Address with 1s in the first `length` bits and then 0s representing the
+    /// returns a new Address with `1s` in the first `length` bits and then `0s` representing the
     /// network mask for this prefix
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("255.255.255.192", prefix.mask().to_string());
-    /// }
-    ///
-    /// check("1.2.3.4/26".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.4/26".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!("255.255.255.192", prefix.mask().to_string());
     /// ```
     fn mask(&self) -> Self::Address {
         match self.length() {
@@ -182,13 +162,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("1.2.3.192/26", prefix.network().to_string());
-    /// }
-    ///
-    /// check("1.2.3.234/26".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.234/26".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!("1.2.3.192/26", prefix.network().to_string());
     /// ```
     fn network(&self) -> Self {
         let address = self.address() & self.mask();
@@ -200,13 +176,12 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
     /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("0.0.0.42/26", prefix.host().to_string());
     /// }
     ///
-    /// check("1.2.3.234/26".parse::<Ipv4Net>().unwrap());
+    /// let prefix = "1.2.3.234/26".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!("0.0.0.42/26", prefix.host().to_string());
     /// ```
     fn host(&self) -> Self {
         let address = self.address() & !self.mask();
@@ -219,13 +194,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!("1.2.3.255/24", prefix.broadcast().to_string());
-    /// }
-    ///
-    /// check("1.2.3.1/24".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.1/24".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!("1.2.3.255/24", prefix.broadcast().to_string());
     /// ```
     fn broadcast(&self) -> Self {
         let address = self.address() | !self.mask();
@@ -238,13 +209,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!(128, prefix.num_addresses().unwrap());
-    /// }
-    ///
-    /// check("1.2.3.0/25".parse::<Ipv4Net>().unwrap());
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!(128, prefix.num_addresses().unwrap());
     /// ```
     fn num_addresses(&self) -> Result<u32> {
         self.num_prefixes(Self::Address::BITS)
@@ -256,13 +223,12 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
     /// fn check<P: Prefix>(prefix: P) {
-    ///     assert_eq!(4, prefix.num_prefixes(27).unwrap());
     /// }
     ///
-    /// check("1.2.3.0/25".parse::<Ipv4Net>().unwrap());
+    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!(4, prefix.num_prefixes(27).unwrap());
     /// ```
     fn num_prefixes(&self, length: u8) -> Result<u32> {
         match length {
@@ -283,9 +249,8 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
-    /// let prefix: Ipv4Net = "1.2.3.0/24".parse().unwrap();
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// let prefix: Ipv4Prefix = "1.2.3.0/24".parse().unwrap();
     /// let (a, b) = prefix.halves().unwrap();
     /// assert_eq!("1.2.3.0/25", a.to_string());
     /// assert_eq!("1.2.3.128/25", b.to_string());
@@ -310,20 +275,19 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::Prefix;
-    /// # use ipnet::Ipv4Net;
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
     /// # use std::net::Ipv4Addr;
     /// fn check_contains<P: Prefix, T: Prefix>(container: P, containee: T) -> bool {
     ///     container.contains(&containee)
     /// }
     ///
     /// // Contains self
-    /// let net: Ipv4Net = "192.168.0.0/24".parse().unwrap();
+    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
     /// assert!(check_contains(net, net));
     ///
     /// // Nets
-    /// let net_yes: Ipv4Net = "192.168.0.0/25".parse().unwrap();
-    /// let net_no: Ipv4Net = "192.168.0.0/23".parse().unwrap();
+    /// let net_yes: Ipv4Prefix = "192.168.0.0/25".parse().unwrap();
+    /// let net_no: Ipv4Prefix = "192.168.0.0/23".parse().unwrap();
     /// assert!(check_contains(net, net_yes));
     /// assert!(!check_contains(net, net_no));
     ///
@@ -340,6 +304,50 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
             prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
             _ => false,
         }
+    }
+}
+
+/// implements Prefix using [`Ipv4Addr`]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Ipv4Prefix {
+    address: Ipv4Addr,
+    length: u8,
+}
+
+impl std::fmt::Display for Ipv4Prefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.address)?;
+        write!(f, "/")?;
+        write!(f, "{}", self.length)
+    }
+}
+
+impl std::str::FromStr for Ipv4Prefix {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        let net = ipnet::Ipv4Net::from_str(s)?;
+        Ok(unsafe { Self::unsafe_new(net.address(), net.length()) })
+    }
+}
+
+impl From<ipnet::AddrParseError> for crate::errors::Error {
+    fn from(err: ipnet::AddrParseError) -> Self {
+        Self::ParseError(Some(Box::new(err)))
+    }
+}
+
+impl Prefix for Ipv4Prefix {
+    type Address = std::net::Ipv4Addr;
+
+    fn address(&self) -> Self::Address {
+        self.address
+    }
+    fn length(&self) -> u8 {
+        self.length
+    }
+    unsafe fn unsafe_new(address: Self::Address, length: u8) -> Self {
+        Ipv4Prefix { address, length }
     }
 }
 
@@ -438,7 +446,7 @@ where
 }
 
 impl Prefix for ipnet::Ipv4Net {
-    type Address = Ipv4Addr;
+    type Address = std::net::Ipv4Addr;
 
     fn address(&self) -> Self::Address {
         self.addr()
