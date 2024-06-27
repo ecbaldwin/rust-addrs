@@ -7,6 +7,8 @@ pub enum Error {
     InvalidMask,
     /// returned when counting addresses or prefixes overflows
     TooMany,
+    /// returned when parsing a prefix from a string fails
+    ParseError(Option<Box<dyn std::error::Error>>),
 }
 
 /// returned from methods in this crate
@@ -19,7 +21,20 @@ impl std::fmt::Display for Error {
                 write!(f, "length is more than the number bits in the address")
             }
             Error::InvalidMask => write!(f, "invalid netmask"),
+            Error::ParseError(_) => write!(f, "prefix parsing failed"),
             Error::TooMany => write!(f, "too many to count"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::ParseError(s) => match s {
+                Some(e) => Some(&**e),
+                None => None,
+            },
+            _ => None,
         }
     }
 }
