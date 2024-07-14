@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, ops::RangeInclusive};
 
 use crate::errors::{Error, Result};
 
@@ -304,6 +304,27 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
             prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
             _ => false,
         }
+    }
+
+    /// returns an inclusive range of IP addresses equivalent to the range of addresses contained
+    /// within this Prefix. The range is not open-ended so that the entire IP range can be
+    /// represented.
+    ///
+    /// Example
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// # use std::net::Ipv4Addr;
+    ///
+    /// // Contains self
+    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
+    /// let range = net.as_range_i();
+    /// let ip_yes: Ipv4Addr = "192.168.0.1".parse().unwrap();
+    /// let ip_no: Ipv4Addr = "192.168.1.0".parse().unwrap();
+    /// assert_eq!(net.contains(&ip_yes), range.contains(&ip_yes));
+    /// assert_eq!(net.contains(&ip_no), range.contains(&ip_no));
+    /// ```
+    fn as_range_i(&self) -> RangeInclusive<Self::Address> {
+        RangeInclusive::new(self.network().address(), self.broadcast().address())
     }
 }
 
