@@ -18,6 +18,7 @@ use crate::errors::{Error, Result};
 /// [`Ipv4Addr::octets`] but it is more awkward.
 pub trait Address:
     Eq
+    + Ord
     + From<u32>
     + Into<u32>
     + From<[u8; 4]>
@@ -203,47 +204,6 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
         unsafe { Self::unsafe_new(address, self.length()) }
     }
 
-    /// returns the number of addresses in the prefix, including network and broadcast addresses.
-    /// It ignores any bits set in the host part of the address. In the case of 0 prefix length, it
-    /// returns [`Error::TooMany`].
-    ///
-    /// # Example
-    /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
-    /// assert_eq!(128, prefix.num_addresses().unwrap());
-    /// ```
-    fn num_addresses(&self) -> Result<u32> {
-        self.num_prefixes(Self::Address::BITS)
-    }
-
-    /// returns the number of prefixes of the given length contained in this prefix. It ignores any
-    /// bits set in the host part of the address. If the number would overflow a [`u32`] it returns
-    /// [`Error::TooMany`]. If >32 is passed for length then [`Error::InvalidLength`] is returned.
-    ///
-    /// # Example
-    /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// fn check<P: Prefix>(prefix: P) {
-    /// }
-    ///
-    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
-    /// assert_eq!(4, prefix.num_prefixes(27).unwrap());
-    /// ```
-    fn num_prefixes(&self, length: u8) -> Result<u32> {
-        match length {
-            length if length < self.length() => Ok(0),
-            length if Self::Address::BITS < length => Err(Error::InvalidLength),
-            length => {
-                let p = (length - self.length()).into();
-                match 2u32.checked_pow(p) {
-                    Some(c) => Ok(c),
-                    None => Err(Error::TooMany),
-                }
-            }
-        }
-    }
-
     /// returns two prefixes that partition this prefix into two equal halves. If the prefix is a
     /// host route (/32), then None is returned.
     ///
@@ -269,50 +229,13 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
         }
     }
 
-    /// returns true if the given containee is wholly contained within this Prefix. If the two
-    /// Prefixes are equal, true is returned. The host bits in the address are ignored when testing
-    /// containership.
-    ///
-    /// # Example
-    /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// # use std::net::Ipv4Addr;
-    /// fn check_contains<P: Prefix, T: Prefix>(container: P, containee: T) -> bool {
-    ///     container.contains(&containee)
-    /// }
-    ///
-    /// // Contains self
-    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
-    /// assert!(check_contains(net, net));
-    ///
-    /// // Nets
-    /// let net_yes: Ipv4Prefix = "192.168.0.0/25".parse().unwrap();
-    /// let net_no: Ipv4Prefix = "192.168.0.0/23".parse().unwrap();
-    /// assert!(check_contains(net, net_yes));
-    /// assert!(!check_contains(net, net_no));
-    ///
-    /// // IPs
-    /// let ip_yes: Ipv4Addr = "192.168.0.1".parse().unwrap();
-    /// let ip_no: Ipv4Addr = "192.168.1.0".parse().unwrap();
-    /// assert!(check_contains(net, ip_yes));
-    /// assert!(!check_contains(net, ip_no));
-    /// ```
-    fn contains<P: Prefix>(&self, other: &P) -> bool {
-        use prefix_private::Cmp;
-        let (ord, _, _, _) = self.cmp(other);
-        match ord {
-            prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
-            _ => false,
-        }
-    }
-
     /// returns an inclusive range of IP addresses equivalent to the range of addresses contained
     /// within this Prefix. The range is not open-ended so that the entire IP range can be
     /// represented.
     ///
     /// Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix, Set};
     /// # use std::net::Ipv4Addr;
     ///
     /// // Contains self
@@ -325,6 +248,74 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// ```
     fn as_range_i(&self) -> RangeInclusive<Self::Address> {
         RangeInclusive::new(self.network().address(), self.broadcast().address())
+    }
+}
+
+impl<T, P> Set for P
+where
+    T: Address,
+    P: Prefix<Address = T>,
+{
+    type Address = T;
+
+    fn num_prefixes(&self, length: u8) -> Result<u32> {
+        match length {
+            length if length < self.length() => Ok(0),
+            length if Self::Address::BITS < length => Err(Error::InvalidLength),
+            length => {
+                let p = (length - self.length()).into();
+                match 2u32.checked_pow(p) {
+                    Some(c) => Ok(c),
+                    None => Err(Error::TooMany),
+                }
+            }
+        }
+    }
+
+    fn contains<P2: Prefix>(&self, other: &P2) -> bool {
+        use prefix_private::Cmp;
+        let (ord, _, _, _) = self.cmp(other);
+        match ord {
+            prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
+            _ => false,
+        }
+    }
+}
+
+impl<T> Set for RangeInclusive<T>
+where
+    T: Address,
+{
+    type Address = T;
+
+    fn num_prefixes(&self, length: u8) -> Result<u32> {
+        match length {
+            length if T::BITS < length => Err(Error::InvalidLength),
+            _ => {
+                let start: u32 = (*self.start()).into();
+                let end: u32 = (*self.end()).into();
+                if end < start {
+                    return Ok(0);
+                }
+
+                let xor = start ^ end;
+                let zeros = xor.leading_zeros();
+                let (mask, pivot) = match u32::MAX.checked_shl(u32::BITS - zeros) {
+                    Some(u32::MAX) => (u32::MAX, 0), // zeroes is 32
+                    Some(m) => (m, 1 << (u32::BITS - (zeros + 1))),
+                    None => (0, 1 << (u32::BITS - 1)), // zeroes is 0
+                };
+                let middle = (start & mask) | pivot;
+                let size = 2u32.pow(u32::BITS - length as u32);
+                Ok((middle - start) / size + (end - middle + 1) / size)
+            }
+        }
+    }
+
+    fn contains<P2: Prefix<Address = T>>(&self, other: &P2) -> bool {
+        // This implementation will need to change when Prefix changes to Set for the containee
+        return RangeInclusive::<T>::contains::<T>(self, &other.network().address())
+            && RangeInclusive::<T>::contains::<T>(self, &other.broadcast().address());
     }
 }
 
@@ -497,6 +488,90 @@ where
     unsafe fn unsafe_new(ip: Self::Address, _length: u8) -> Self {
         ip
     }
+}
+
+/// Defines minimum requirements of an ipv4 set for this crate.
+pub trait Set {
+    /// the type of IP address associated with this set
+    type Address: Address;
+
+    /// returns the number of addresses in the set.
+    /// It ignores any bits set in the host part of the address. In the case of 0 prefix length, it
+    /// returns [`Error::TooMany`].
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Set};
+    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!(128, prefix.num_addresses().unwrap());
+    /// ```
+    fn num_addresses(&self) -> Result<u32> {
+        self.num_prefixes(Self::Address::BITS)
+    }
+
+    /// returns the number of prefixes of the given length contained in this set. If the number
+    /// would overflow a [`u32`] it returns [`Error::TooMany`]. If >32 is passed for length then
+    /// [`Error::InvalidLength`] is returned.
+    ///
+    /// # Examples
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Set};
+    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// assert_eq!(4, prefix.num_prefixes(27).unwrap());
+    /// ```
+    /// When the prefix length specifies a prefix having more than one address (e.g. a /24 in IPv4
+    /// contains 256 addresses) then only properly aligned, wholly contained, prefixes of that size
+    /// are counted. See the following example noting that there are many addresses on both ends of
+    /// the range that cannot be included in a prefix of length 24 because of alignment.
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Set};
+    /// # use std::net::Ipv4Addr;
+    /// let from = "10.223.255.1".parse::<Ipv4Addr>().unwrap();
+    /// let to = "10.225.0.254".parse::<Ipv4Addr>().unwrap();
+    /// let range = from..=to;
+    /// assert_eq!(256, range.num_prefixes(24).unwrap());
+    /// ```
+    fn num_prefixes(&self, length: u8) -> Result<u32>;
+
+    /// returns true if the set is empty
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Set};
+    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// assert!(!prefix.is_empty());
+    /// ```
+    fn is_empty(&self) -> bool {
+        match self.num_addresses() {
+            Ok(0) => true,
+            _ => false,
+        }
+    }
+
+    /// returns true if the given containee is wholly contained within this Prefix. If the two
+    /// Prefixes are equal, true is returned. The host bits in the address are ignored when testing
+    /// containership.
+    ///
+    /// # Example
+    /// ```
+    /// # use addrs::ipv4::{Ipv4Prefix, Prefix, Set};
+    /// # use std::net::Ipv4Addr;
+    /// // Contains self
+    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
+    /// assert!(net.contains(&net));
+    ///
+    /// // Nets
+    /// let net_yes: Ipv4Prefix = "192.168.0.0/25".parse().unwrap();
+    /// let net_no: Ipv4Prefix = "192.168.0.0/23".parse().unwrap();
+    /// assert!(net.contains(&net_yes));
+    /// assert!(!net.contains(&net_no));
+    ///
+    /// // IPs
+    /// let ip_yes: Ipv4Addr = "192.168.0.1".parse().unwrap();
+    /// let ip_no: Ipv4Addr = "192.168.1.0".parse().unwrap();
+    /// assert!(net.contains(&ip_yes));
+    /// assert!(!net.contains(&ip_no));
+    /// ```
+    fn contains<P2: Prefix<Address = Self::Address>>(&self, other: &P2) -> bool;
 }
 
 #[cfg(test)]

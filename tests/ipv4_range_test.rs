@@ -1,4 +1,4 @@
-use addrs::ipv4::Prefix;
+use addrs::ipv4::{Prefix, Set};
 
 fn range_contains(from: &str, to: &str, contained: &str, not_contained: Vec<&str>) {
     let from = util::a(from);
@@ -59,4 +59,34 @@ fn address_as_range() {
     let range = address.as_range_i();
     assert_eq!(&address, range.start());
     assert_eq!(&address, range.end());
+}
+
+fn num_prefixes(expected: u32, from: &str, to: &str, length: u8) {
+    let from = util::a(from);
+    let to = util::a(to);
+    let range = from..=to;
+    assert_eq!(expected, range.num_prefixes(length).unwrap());
+}
+
+util::tests! { num_prefixes {
+    empty(0, "10.224.24.1", "10.224.24.0", 32);
+    single(1, "10.224.24.1", "10.224.24.1", 32);
+    lowest(1, "0.0.0.0", "0.0.0.0", 32);
+    highest(1, "255.255.255.255", "255.255.255.255", 32);
+    class_c(256, "10.224.24.0", "10.224.24.255", 32);
+
+    class_b_to_c(256, "10.224.0.0", "10.224.255.255", 24);
+    class_b_to_c_extra(256, "10.223.255.1", "10.225.0.0", 24);
+
+    class_c_not_aligned(0, "10.223.255.1", "10.224.0.254", 24);
+
+    just_two(2, "127.255.255.255", "128.0.0.0", 32);
+} }
+
+#[test]
+fn num_prefixes_err() {
+    let from = util::a("10.224.24.1");
+    let to = util::a("10.224.24.0");
+    let range = from..=to;
+    assert!(range.num_prefixes(33).is_err());
 }

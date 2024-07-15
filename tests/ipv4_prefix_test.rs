@@ -1,5 +1,5 @@
 use addrs::errors::Result;
-use addrs::ipv4::{self, Address, Prefix};
+use addrs::ipv4::{self, Address, Prefix, Set};
 
 #[test]
 fn test_u32() {
