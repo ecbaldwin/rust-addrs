@@ -1,12 +1,12 @@
-use std::{net::Ipv4Addr, ops::RangeInclusive};
+use std::ops::RangeInclusive;
 
 use crate::errors::{Error, Result};
 
 /// Defines minimum requirements of an ipv4 address for this crate
 ///
-/// The purpose of this trait is not to replace nor even add to [`Ipv4Addr`]. It is well thought
-/// out and (nearly) complete enough for my purposes[^1]. For this reason, this crate doesn't even
-/// provide a type alias for it.
+/// The purpose of this trait is not to replace nor even add to [`std::net::Ipv4Addr`]. It is well
+/// thought out and (nearly) complete enough for my purposes[^1]. For this reason, this crate
+/// doesn't even provide a type alias for it.
 ///
 /// This trait is mostly for use within this crate to formalize its good properties on which this
 /// crate may depend. We also provide a minimal set of integration tests which are meant as a
@@ -15,10 +15,12 @@ use crate::errors::{Error, Result};
 /// This trait also servers to limit the touch points this crate has on that type.
 ///
 /// [^1]: One minor exception is that I wish it implemented Into<[u8; 4]>. There is
-/// [`Ipv4Addr::octets`] but it is more awkward.
+/// [`std::net::Ipv4Addr::octets`] but it is more awkward.
 pub trait Address:
     Eq
     + Ord
+    + Clone
+    + Copy
     + From<u32>
     + Into<u32>
     + From<[u8; 4]>
@@ -28,10 +30,8 @@ pub trait Address:
     + std::ops::BitAnd<Output = Self>
     + std::ops::BitOr<Output = Self>
     + std::ops::Not<Output = Self>
-    + Copy
-    + Clone
-    + Send
     + Sized
+    + Send
     + Sync
     + Unpin
 {
@@ -82,17 +82,18 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.4/24".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::{Prefix};
+    /// let prefix = "1.2.3.4/24".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!("1.2.3.4", prefix.address().to_string());
     /// ```
     fn address(&self) -> Self::Address;
+
     /// returns the prefix length which is the number of leading 1s in the netmask
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.4/23".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::Prefix;
+    /// let prefix = "1.2.3.4/23".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!(23, prefix.length());
     /// ```
     fn length(&self) -> u8;
@@ -105,10 +106,10 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// # use addrs::ipv4::Prefix;
     /// # use std::net::Ipv4Addr;
     /// let ip = Ipv4Addr::new(1,2,3,4);
-    /// let prefix: Ipv4Prefix = Prefix::from_address_length(ip, 25).unwrap();
+    /// let prefix: ipnet::Ipv4Net = Prefix::from_address_length(ip, 25).unwrap();
     /// assert_eq!("1.2.3.4/25", prefix.to_string());
     /// ```
     fn from_address_length(ip: Self::Address, length: u8) -> Result<Self> {
@@ -124,11 +125,11 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// # use addrs::ipv4::Prefix;
     /// # use std::net::Ipv4Addr;
     /// let ip = Ipv4Addr::new(8,7,6,5);
     /// let mask = Ipv4Addr::new(255,255,252,0);
-    /// let prefix: Ipv4Prefix = Prefix::from_address_mask(ip, mask).unwrap();
+    /// let prefix: ipnet::Ipv4Net = Prefix::from_address_mask(ip, mask).unwrap();
     /// assert_eq!("8.7.6.5/22", prefix.to_string());
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
         let mask: u32 = mask.into();
@@ -144,8 +145,8 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.4/26".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::Prefix;
+    /// let prefix = "1.2.3.4/26".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!("255.255.255.192", prefix.mask().to_string());
     /// ```
     fn mask(&self) -> Self::Address {
@@ -163,9 +164,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.234/26".parse::<Ipv4Prefix>().unwrap();
-    /// assert_eq!("1.2.3.192/26", prefix.network().to_string());
+    /// # use addrs::ipv4::Prefix;
+    /// let prefix = "1.2.3.234/26".parse::<ipnet::Ipv4Net>().unwrap();
+    /// assert_eq!("1.2.3.192/26", Prefix::network(&prefix).to_string());
     /// ```
     fn network(&self) -> Self {
         let address = self.address() & self.mask();
@@ -177,11 +178,11 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
+    /// # use addrs::ipv4::Prefix;
     /// fn check<P: Prefix>(prefix: P) {
     /// }
     ///
-    /// let prefix = "1.2.3.234/26".parse::<Ipv4Prefix>().unwrap();
+    /// let prefix = "1.2.3.234/26".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!("0.0.0.42/26", prefix.host().to_string());
     /// ```
     fn host(&self) -> Self {
@@ -195,9 +196,9 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix = "1.2.3.1/24".parse::<Ipv4Prefix>().unwrap();
-    /// assert_eq!("1.2.3.255/24", prefix.broadcast().to_string());
+    /// # use addrs::ipv4::Prefix;
+    /// let prefix = "1.2.3.1/24".parse::<ipnet::Ipv4Net>().unwrap();
+    /// assert_eq!("1.2.3.255/24", Prefix::broadcast(&prefix).to_string());
     /// ```
     fn broadcast(&self) -> Self {
         let address = self.address() | !self.mask();
@@ -209,8 +210,8 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix};
-    /// let prefix: Ipv4Prefix = "1.2.3.0/24".parse().unwrap();
+    /// # use addrs::ipv4::Prefix;
+    /// let prefix: ipnet::Ipv4Net = "1.2.3.0/24".parse().unwrap();
     /// let (a, b) = prefix.halves().unwrap();
     /// assert_eq!("1.2.3.0/25", a.to_string());
     /// assert_eq!("1.2.3.128/25", b.to_string());
@@ -218,7 +219,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     fn halves(&self) -> Option<(Self, Self)> {
         match self.length() {
             length if length < Self::Address::BITS => {
-                let left = self.network().address().into();
+                let left: u32 = self.network().address().into();
                 let right = left | (0x80000000 >> length);
                 Some((
                     unsafe { Self::unsafe_new(left.into(), length + 1) },
@@ -235,11 +236,11 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix, Set};
+    /// # use addrs::ipv4::{Prefix, Set};
     /// # use std::net::Ipv4Addr;
     ///
     /// // Contains self
-    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
+    /// let net: ipnet::Ipv4Net = "192.168.0.0/24".parse().unwrap();
     /// let range = net.as_range_i();
     /// let ip_yes: Ipv4Addr = "192.168.0.1".parse().unwrap();
     /// let ip_no: Ipv4Addr = "192.168.1.0".parse().unwrap();
@@ -273,7 +274,6 @@ where
     }
 
     fn contains<P2: Prefix>(&self, other: &P2) -> bool {
-        use prefix_private::Cmp;
         let (ord, _, _, _) = self.cmp(other);
         match ord {
             prefix_private::PrefixOrd::Same | prefix_private::PrefixOrd::Contains => true,
@@ -316,50 +316,6 @@ where
         // This implementation will need to change when Prefix changes to Set for the containee
         return RangeInclusive::<T>::contains::<T>(self, &other.network().address())
             && RangeInclusive::<T>::contains::<T>(self, &other.broadcast().address());
-    }
-}
-
-/// implements Prefix using [`Ipv4Addr`]
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Ipv4Prefix {
-    address: Ipv4Addr,
-    length: u8,
-}
-
-impl std::fmt::Display for Ipv4Prefix {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.address)?;
-        write!(f, "/")?;
-        write!(f, "{}", self.length)
-    }
-}
-
-impl std::str::FromStr for Ipv4Prefix {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
-        let net = ipnet::Ipv4Net::from_str(s)?;
-        Ok(unsafe { Self::unsafe_new(net.address(), net.length()) })
-    }
-}
-
-impl From<ipnet::AddrParseError> for crate::errors::Error {
-    fn from(err: ipnet::AddrParseError) -> Self {
-        Self::ParseError(Some(Box::new(err)))
-    }
-}
-
-impl Prefix for Ipv4Prefix {
-    type Address = std::net::Ipv4Addr;
-
-    fn address(&self) -> Self::Address {
-        self.address
-    }
-    fn length(&self) -> u8 {
-        self.length
-    }
-    unsafe fn unsafe_new(address: Self::Address, length: u8) -> Self {
-        Ipv4Prefix { address, length }
     }
 }
 
@@ -412,7 +368,8 @@ where
     // | Contains | 0..31  | Right | `longer` should be `shorter`'s right child
     // | Same     | 0..32  | None  | `shorter` and `longer` are the same prefix
     fn containership(&self, longer: &T) -> (PrefixOrd, u8, Option<Child>) {
-        let (short, long) = (self.address().octets(), longer.address().octets());
+        let short: [u8; 4] = self.address().octets();
+        let long: [u8; 4] = longer.address().octets();
 
         for i in 0..4 {
             let offset = (i * 8) as u8;
@@ -463,12 +420,13 @@ impl Prefix for ipnet::Ipv4Net {
     fn address(&self) -> Self::Address {
         self.addr()
     }
+
     fn length(&self) -> u8 {
         self.prefix_len()
     }
 
     unsafe fn unsafe_new(ip: Self::Address, length: u8) -> Self {
-        Self::new(ip, length).unwrap()
+        Self::new(ip, length).unwrap_unchecked()
     }
 }
 
@@ -501,8 +459,8 @@ pub trait Set {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Set};
-    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::Set;
+    /// let prefix = "1.2.3.0/25".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!(128, prefix.num_addresses().unwrap());
     /// ```
     fn num_addresses(&self) -> Result<u32> {
@@ -515,8 +473,8 @@ pub trait Set {
     ///
     /// # Examples
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Set};
-    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::Set;
+    /// let prefix = "1.2.3.0/25".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!(4, prefix.num_prefixes(27).unwrap());
     /// ```
     /// When the prefix length specifies a prefix having more than one address (e.g. a /24 in IPv4
@@ -524,7 +482,7 @@ pub trait Set {
     /// are counted. See the following example noting that there are many addresses on both ends of
     /// the range that cannot be included in a prefix of length 24 because of alignment.
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Set};
+    /// # use addrs::ipv4::Set;
     /// # use std::net::Ipv4Addr;
     /// let from = "10.223.255.1".parse::<Ipv4Addr>().unwrap();
     /// let to = "10.225.0.254".parse::<Ipv4Addr>().unwrap();
@@ -536,8 +494,8 @@ pub trait Set {
     /// returns true if the set is empty
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Set};
-    /// let prefix = "1.2.3.0/25".parse::<Ipv4Prefix>().unwrap();
+    /// # use addrs::ipv4::Set;
+    /// let prefix = "1.2.3.0/25".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert!(!prefix.is_empty());
     /// ```
     fn is_empty(&self) -> bool {
@@ -553,15 +511,15 @@ pub trait Set {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Ipv4Prefix, Prefix, Set};
+    /// # use addrs::ipv4::{Prefix, Set};
     /// # use std::net::Ipv4Addr;
     /// // Contains self
-    /// let net: Ipv4Prefix = "192.168.0.0/24".parse().unwrap();
+    /// let net: ipnet::Ipv4Net = "192.168.0.0/24".parse().unwrap();
     /// assert!(net.contains(&net));
     ///
     /// // Nets
-    /// let net_yes: Ipv4Prefix = "192.168.0.0/25".parse().unwrap();
-    /// let net_no: Ipv4Prefix = "192.168.0.0/23".parse().unwrap();
+    /// let net_yes: ipnet::Ipv4Net = "192.168.0.0/25".parse().unwrap();
+    /// let net_no: ipnet::Ipv4Net = "192.168.0.0/23".parse().unwrap();
     /// assert!(net.contains(&net_yes));
     /// assert!(!net.contains(&net_no));
     ///
@@ -579,9 +537,13 @@ mod test {
     use super::prefix_private::{Child, Cmp, PrefixOrd};
     use super::*;
 
+    pub fn p(s: &str) -> ipnet::Ipv4Net {
+        s.parse().expect("bad prefix")
+    }
+
     fn cmp(
-        a: util::Prefix,
-        b: util::Prefix,
+        a: ipnet::Ipv4Net,
+        b: ipnet::Ipv4Net,
         expected_ord: PrefixOrd,
         expected_common: u8,
         expected_child: Option<Child>,
@@ -610,74 +572,74 @@ mod test {
         assert_eq!(expected_ord, ord);
     }
 
-    util::tests! { cmp {
+    runner::tests! { cmp {
         trivial(
-            util::p("0.0.0.0/0"),
-            util::p("0.0.0.0/0"),
+            p("0.0.0.0/0"),
+            p("0.0.0.0/0"),
             PrefixOrd::Same, 0, None);
         exact(
-            util::p("10.0.0.0/16"),
-            util::p("10.0.0.0/16"),
+            p("10.0.0.0/16"),
+            p("10.0.0.0/16"),
             PrefixOrd::Same, 16, None);
         exact_partial(
-            util::p("10.0.0.0/19"),
-            util::p("10.0.31.0/19"),
+            p("10.0.0.0/19"),
+            p("10.0.31.0/19"),
             PrefixOrd::Same, 19, None);
         empty_prefix_match(
-            util::p("0.0.0.0/0"),
-            util::p("10.10.0.0/16"),
+            p("0.0.0.0/0"),
+            p("10.10.0.0/16"),
             PrefixOrd::Contains, 0, Some(Child::Left));
         empty_prefix_match_backwards(
-            util::p("0.0.0.0/0"),
-            util::p("130.10.0.0/16"),
+            p("0.0.0.0/0"),
+            p("130.10.0.0/16"),
             PrefixOrd::Contains, 0, Some(Child::Right));
         matches(
-            util::p("10.0.0.0/8"),
-            util::p("10.10.0.0/16"),
+            p("10.0.0.0/8"),
+            p("10.10.0.0/16"),
             PrefixOrd::Contains, 8, Some(Child::Left));
         matches_partial(
-            util::p("10.200.0.0/9"),
-            util::p("10.129.0.0/16"),
+            p("10.200.0.0/9"),
+            p("10.129.0.0/16"),
             PrefixOrd::Contains, 9, Some(Child::Left));
         matches_backwards(
-            util::p("10.0.0.0/8"),
-            util::p("10.200.0.0/16"),
+            p("10.0.0.0/8"),
+            p("10.200.0.0/16"),
             PrefixOrd::Contains, 8, Some(Child::Right));
         matches_backwards_partial(
-            util::p("10.240.0.0/9"),
-            util::p("10.200.0.0/16"),
+            p("10.240.0.0/9"),
+            p("10.200.0.0/16"),
             PrefixOrd::Contains, 9, Some(Child::Right));
         disjoint(
-            util::p("0.0.0.0/1"),
-            util::p("128.0.0.0/1"),
+            p("0.0.0.0/1"),
+            p("128.0.0.0/1"),
             PrefixOrd::Disjoint, 0, Some(Child::Right));
         disjoint_longer(
-            util::p("0.0.0.0/17"),
-            util::p("0.0.128.0/17"),
+            p("0.0.0.0/17"),
+            p("0.0.128.0/17"),
             PrefixOrd::Disjoint, 16, Some(Child::Right));
         disjoint_longer_partial(
-            util::p("0.0.0.0/17"),
-            util::p("0.1.0.0/17"),
+            p("0.0.0.0/17"),
+            p("0.1.0.0/17"),
             PrefixOrd::Disjoint, 15, Some(Child::Right));
         disjoint_backwards(
-            util::p("128.0.0.0/1"),
-            util::p("0.0.0.0/1"),
+            p("128.0.0.0/1"),
+            p("0.0.0.0/1"),
             PrefixOrd::Disjoint, 0, Some(Child::Left));
         disjoint_backwards_longer(
-            util::p("0.0.128.0/19"),
-            util::p("0.0.0.0/19"),
+            p("0.0.128.0/19"),
+            p("0.0.0.0/19"),
             PrefixOrd::Disjoint, 16, Some(Child::Left));
         disjoint_backwards_longer_partial(
-            util::p("0.1.0.0/19"),
-            util::p("0.0.0.0/19"),
+            p("0.1.0.0/19"),
+            p("0.0.0.0/19"),
             PrefixOrd::Disjoint, 15, Some(Child::Left));
         disjoint_with_common(
-            util::p("10.0.0.0/16"),
-            util::p("10.10.0.0/16"),
+            p("10.0.0.0/16"),
+            p("10.10.0.0/16"),
             PrefixOrd::Disjoint, 12, Some(Child::Right));
         disjoint_with_more_disjoint_bytes(
-            util::p("0.255.255.0/24"),
-            util::p("128.0.0.0/24"),
+            p("0.255.255.0/24"),
+            p("128.0.0.0/24"),
             PrefixOrd::Disjoint, 0, Some(Child::Right));
     } }
 }

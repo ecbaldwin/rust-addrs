@@ -1,5 +1,9 @@
+#![feature(step_trait)]
+
 use addrs::errors::Result;
-use addrs::ipv4::{self, Address, Prefix, Set};
+use addrs::ipv4::{self, Prefix, Set};
+
+mod util;
 
 #[test]
 fn test_u32() {
@@ -11,7 +15,7 @@ fn test_u32() {
 #[test]
 fn octets() {
     let address = util::a("1.2.3.4");
-    assert_eq!([1, 2, 3, 4], Address::octets(&address));
+    assert_eq!([1, 2, 3, 4], Into::<[u8; 4]>::into(address));
 }
 
 fn prefix_addr_len(prefix: util::Prefix, address: util::Address, mask: util::Address, len: u8) {
@@ -20,7 +24,7 @@ fn prefix_addr_len(prefix: util::Prefix, address: util::Address, mask: util::Add
     assert_eq!(len, prefix.length());
 }
 
-util::tests! { prefix_addr_len {
+runner::tests! { prefix_addr_len {
     basic(util::p("10.0.0.1/24"), util::a("10.0.0.1"), util::a("255.255.255.0"), 24);
 } }
 
@@ -32,7 +36,7 @@ fn prefix_compare(a: &str, b: &str, eq: bool) {
     compare(util::p(a), util::p(b), eq)
 }
 
-util::tests! { prefix_compare {
+runner::tests! { prefix_compare {
     equal("10.0.0.1/24", "10.0.0.1/24", true);
     length_not_equal("10.0.0.1/24", "10.0.0.1/25", false);
     host_bits_not_equal("10.0.0.1/24", "10.0.0.2/24", false);
@@ -44,7 +48,7 @@ fn prefix_from_string(expected: std::result::Result<util::Prefix, ()>, cidr: &st
     assert_eq!(expected, cidr.parse().or(Err(())))
 }
 
-util::tests! { prefix_from_string {
+runner::tests! { prefix_from_string {
     success(Ok(util::p("10.224.24.1/27")), "10.224.24.1/27");
     ipv6(Err(()), "2001::1/64");
     bogus(Err(()), "bogus");
@@ -54,7 +58,7 @@ fn prefix_to_string(expected: &str, prefix: util::Prefix) {
     assert_eq!(expected, prefix.to_string());
 }
 
-util::tests! { prefix_to_string {
+runner::tests! { prefix_to_string {
     success("10.224.24.1/27", util::p("10.224.24.1/27"));
     zero("0.0.0.0/0", util::p("0.0.0.0/0"));
     one_seventeen("10.224.24.117/25", util::p("10.224.24.117/25"));
@@ -72,7 +76,7 @@ fn prefix_net_host_broadcast(
     assert_eq!(broadcast, Prefix::broadcast(&prefix));
 }
 
-util::tests! { prefix_net_host_broadcast {
+runner::tests! { prefix_net_host_broadcast {
     zero( util::p("10.224.24.1/0"), util::p("0.0.0.0/0"), util::p("10.224.24.1/0"), util::p("255.255.255.255/0"));
     eight( util::p("10.224.24.1/8"), util::p("10.0.0.0/8"), util::p("0.224.24.1/8"), util::p("10.255.255.255/8"));
     twentytwo( util::p("10.224.24.1/22"), util::p("10.224.24.0/22"), util::p("0.0.0.1/22"), util::p("10.224.27.255/22"));
@@ -83,7 +87,7 @@ fn num_addresses(expected: Result<u32>, prefix: util::Prefix) {
     util::assert_result(expected, prefix.num_addresses());
 }
 
-util::tests! { num_addresses {
+runner::tests! { num_addresses {
     all(Err(addrs::errors::Error::TooMany), util::p("0.0.0.0/0"));
     private(Ok(0x00100000), util::p("172.16.0.0/12"));
     host(Ok(1), util::p("172.16.244.117/32"));
@@ -93,7 +97,7 @@ fn num_prefixes(expected: Result<u32>, prefix: util::Prefix, length: u8) {
     util::assert_result(expected, prefix.num_prefixes(length));
 }
 
-util::tests! { num_prefixes {
+runner::tests! { num_prefixes {
     same_size(Ok(1), util::p("203.0.113.0/24"), 24);
     too_big(Ok(0), util::p("203.0.113.0/24"), 23);
     size_28(Ok(0x40), util::p("203.0.113.0/24"), 30);
@@ -106,7 +110,7 @@ fn from_address_length(expected: Result<util::Prefix>, address: util::Address, l
     util::assert_result(expected, util::Prefix::from_address_length(address, length));
 }
 
-util::tests! { from_address_length {
+runner::tests! { from_address_length {
     basic(Ok(util::p("192.168.1.1/24")), util::a("192.168.1.1"), 24);
     invalid_length(Err(addrs::errors::Error::InvalidLength), util::a("192.168.1.1"), 33);
 } }
@@ -115,7 +119,7 @@ fn from_address_mask(expected: Result<util::Prefix>, address: util::Address, mas
     util::assert_result(expected, util::Prefix::from_address_mask(address, mask));
 }
 
-util::tests! { from_address_mask {
+runner::tests! { from_address_mask {
     basic(Ok(util::p("192.168.1.1/24")), util::a("192.168.1.1"), util::a("255.255.255.0"));
     invalid_length(Err(addrs::errors::Error::InvalidMask), util::a("192.168.1.1"), util::a("192.168.1.0"));
 } }
@@ -124,7 +128,7 @@ fn halves(expected: Option<(util::Prefix, util::Prefix)>, prefix: util::Prefix) 
     assert_eq!(expected, prefix.halves())
 }
 
-util::tests! { halves {
+runner::tests! { halves {
     all_ipv4(Some((util::p("0.0.0.0/1"), util::p("128.0.0.0/1"))), util::p("0.0.0.0/0"));
     size_16(Some((util::p("10.224.0.0/17"), util::p("10.224.128.0/17"))), util::p("10.224.0.0/16"));
     size_24(Some((util::p("10.224.24.0/25"), util::p("10.224.24.128/25"))), util::p("10.224.24.1/24"));
@@ -144,7 +148,7 @@ fn contains<A: addrs::ipv4::Prefix, B: addrs::ipv4::Prefix<Address = A::Address>
     );
 }
 
-util::tests! { contains {
+runner::tests! { contains {
     all(util::p("0.0.0.0/0"), util::p("1.2.3.4/32"));
     same_host(util::p("1.2.3.4/24"), util::p("1.2.3.4/24"));
     same_host_route(util::p("1.2.3.4/32"), util::p("1.2.3.4/32"));

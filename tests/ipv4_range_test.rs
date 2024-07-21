@@ -1,4 +1,8 @@
+#![feature(step_trait)]
+
 use addrs::ipv4::{Prefix, Set};
+
+mod util;
 
 fn range_contains(from: &str, to: &str, contained: &str, not_contained: Vec<&str>) {
     let from = util::a(from);
@@ -12,7 +16,7 @@ fn range_contains(from: &str, to: &str, contained: &str, not_contained: Vec<&str
     }
 }
 
-util::tests! { range_contains {
+runner::tests! { range_contains {
     all_ipv4("0.0.0.0", "255.255.255.255", "1.2.3.4", vec![]);
     ten("10.0.0.0", "10.255.255.255", "10.64.128.196", vec!["9.255.255.255", "11.0.0.0"]);
     single("10.0.0.0", "10.0.0.0", "10.0.0.0", vec!["0.0.0.0", "9.255.255.255", "11.0.0.0", "255.255.255.255"]);
@@ -27,7 +31,7 @@ fn range_empty(from: &str, empty_to: &str, not_empty_to: &str) {
     assert!(!(from..=not_empty_to).is_empty());
 }
 
-util::tests! { range_empty {
+runner::tests! { range_empty {
     extremes("255.255.255.255", "0.0.0.0", "255.255.255.255");
     one_off("10.0.0.1", "10.0.0.0", "10.0.0.1");
 } }
@@ -49,8 +53,8 @@ fn iterator() {
 fn prefix_as_range() {
     let prefix = util::p("10.224.0.0/24");
     let range = prefix.as_range_i();
-    assert_eq!(&prefix.network(), range.start());
-    assert_eq!(&prefix.broadcast(), range.end());
+    assert_eq!(&prefix.network().address(), range.start());
+    assert_eq!(&prefix.broadcast().address(), range.end());
 }
 
 #[test]
@@ -68,7 +72,7 @@ fn num_prefixes(expected: u32, from: &str, to: &str, length: u8) {
     assert_eq!(expected, range.num_prefixes(length).unwrap());
 }
 
-util::tests! { num_prefixes {
+runner::tests! { num_prefixes {
     empty(0, "10.224.24.1", "10.224.24.0", 32);
     single(1, "10.224.24.1", "10.224.24.1", 32);
     lowest(1, "0.0.0.0", "0.0.0.0", 32);
