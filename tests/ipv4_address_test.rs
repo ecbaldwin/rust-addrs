@@ -1,4 +1,6 @@
-use addrs::ipv4;
+use addrs::ipv4::{self, Set};
+
+mod util;
 
 fn address_compare(a: &str, b: &str, eq: bool) {
     fn compare<A: ipv4::Address>(a: A, b: A, eq: bool) {
@@ -8,7 +10,7 @@ fn address_compare(a: &str, b: &str, eq: bool) {
     compare(util::a(a), util::a(b), eq)
 }
 
-util::tests! { address_compare {
+runner::tests! { address_compare {
     equal("10.0.0.1", "10.0.0.1", true);
     not_equal("10.0.0.1", "10.0.0.2", false);
     zero_eq("0.0.0.0", "0.0.0.0", true);
@@ -48,5 +50,30 @@ fn address_to_string() {
 #[test]
 fn address_to_octets() {
     let ip: util::Address = [10, 224, 24, 1].into();
-    assert_eq!([10, 224, 24, 1], ip.octets());
+    assert_eq!([10, 224, 24, 1], Into::<[u8; 4]>::into(ip));
+}
+
+#[test]
+fn address_set_is_empty() {
+    let ip: util::Address = [10, 224, 24, 1].into();
+    assert!(!ip.is_empty());
+}
+
+#[test]
+fn address_set_num_addresses() {
+    let ip: util::Address = [10, 224, 24, 1].into();
+    assert_eq!(1, ip.num_addresses().unwrap());
+}
+
+#[test]
+fn address_set_num_prefixes() {
+    let ip: util::Address = [10, 224, 24, 1].into();
+    assert_eq!(1, ip.num_prefixes(32).unwrap());
+    assert_eq!(0, ip.num_prefixes(31).unwrap());
+}
+
+#[test]
+fn address_set_contains() {
+    let ip: util::Address = [10, 224, 24, 1].into();
+    assert!(ip.contains(&ip));
 }
