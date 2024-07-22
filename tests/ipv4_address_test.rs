@@ -1,5 +1,3 @@
-#![feature(step_trait)]
-
 use addrs::ipv4::{self, Set};
 
 mod util;

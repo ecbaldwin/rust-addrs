@@ -1,5 +1,3 @@
-#![feature(step_trait)]
-
 use addrs::ipv4::{Prefix, Set};
 
 mod util;
@@ -46,7 +44,7 @@ fn debug() {
 #[test]
 fn iterator() {
     let range = util::a("192.168.0.1")..=util::a("192.168.0.7");
-    assert_eq!(7, range.count());
+    assert_eq!(7, range.num_addresses().unwrap());
 }
 
 #[test]

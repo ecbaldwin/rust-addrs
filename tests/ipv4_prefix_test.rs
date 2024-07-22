@@ -1,5 +1,3 @@
-#![feature(step_trait)]
-
 use addrs::errors::Result;
 use addrs::ipv4::{self, Prefix, Set};
 

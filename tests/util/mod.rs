@@ -100,40 +100,6 @@ impl core::fmt::Debug for Address {
     }
 }
 
-impl std::iter::Step for Address {
-    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        match end < start {
-            false => {
-                let start: u32 = (*start).into();
-                let end: u32 = (*end).into();
-                Some((end - start) as usize)
-            }
-            true => None,
-        }
-    }
-    fn forward_checked(start: Self, count: usize) -> Option<Self> {
-        if count <= u32::MAX as usize {
-            match Into::<u32>::into(start).checked_add(count as u32) {
-                Some(address) => Some(address.into()),
-                None => None,
-            }
-        } else {
-            None
-        }
-    }
-
-    fn backward_checked(start: Self, count: usize) -> Option<Self> {
-        if count <= u32::MAX as usize {
-            match Into::<u32>::into(start).checked_sub(count as u32) {
-                Some(address) => Some(address.into()),
-                None => None,
-            }
-        } else {
-            None
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Prefix {
     address: Address,
