@@ -166,11 +166,10 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// ```
     /// # use addrs::ipv4::Prefix;
     /// let prefix = "1.2.3.234/26".parse::<ipnet::Ipv4Net>().unwrap();
-    /// assert_eq!("1.2.3.192/26", Prefix::network(&prefix).to_string());
+    /// assert_eq!("1.2.3.192", Prefix::network(&prefix).to_string());
     /// ```
-    fn network(&self) -> Self {
-        let address = self.address() & self.mask();
-        unsafe { Self::unsafe_new(address, self.length()) }
+    fn network(&self) -> Self::Address {
+        self.address() & self.mask()
     }
 
     /// returns a new Prefix with the network bits zeroed out so that only the bits in the
@@ -183,11 +182,10 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// }
     ///
     /// let prefix = "1.2.3.234/26".parse::<ipnet::Ipv4Net>().unwrap();
-    /// assert_eq!("0.0.0.42/26", prefix.host().to_string());
+    /// assert_eq!(42u32, prefix.host().into());
     /// ```
-    fn host(&self) -> Self {
-        let address = self.address() & !self.mask();
-        unsafe { Self::unsafe_new(address, self.length()) }
+    fn host(&self) -> Self::Address {
+        self.address() & !self.mask()
     }
 
     /// returns a new Prefix with all the host bits set to 1s. Note that this method ignores
@@ -198,11 +196,10 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// ```
     /// # use addrs::ipv4::Prefix;
     /// let prefix = "1.2.3.1/24".parse::<ipnet::Ipv4Net>().unwrap();
-    /// assert_eq!("1.2.3.255/24", Prefix::broadcast(&prefix).to_string());
+    /// assert_eq!("1.2.3.255", Prefix::broadcast(&prefix).to_string());
     /// ```
-    fn broadcast(&self) -> Self {
-        let address = self.address() | !self.mask();
-        unsafe { Self::unsafe_new(address, self.length()) }
+    fn broadcast(&self) -> Self::Address {
+        self.address() | !self.mask()
     }
 
     /// returns two prefixes that partition this prefix into two equal halves. If the prefix is a

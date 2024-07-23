@@ -65,9 +65,9 @@ runner::tests! { prefix_to_string {
 
 fn prefix_net_host_broadcast(
     prefix: util::Prefix,
-    network: util::Prefix,
-    host: util::Prefix,
-    broadcast: util::Prefix,
+    network: util::Address,
+    host: util::Address,
+    broadcast: util::Address,
 ) {
     assert_eq!(network, Prefix::network(&prefix));
     assert_eq!(host, Prefix::host(&prefix));
@@ -75,10 +75,10 @@ fn prefix_net_host_broadcast(
 }
 
 runner::tests! { prefix_net_host_broadcast {
-    zero( util::p("10.224.24.1/0"), util::p("0.0.0.0/0"), util::p("10.224.24.1/0"), util::p("255.255.255.255/0"));
-    eight( util::p("10.224.24.1/8"), util::p("10.0.0.0/8"), util::p("0.224.24.1/8"), util::p("10.255.255.255/8"));
-    twentytwo( util::p("10.224.24.1/22"), util::p("10.224.24.0/22"), util::p("0.0.0.1/22"), util::p("10.224.27.255/22"));
-    thirtytwo( util::p("10.224.24.1/32"), util::p("10.224.24.1/32"), util::p("0.0.0.0/32"), util::p("10.224.24.1/32"));
+    zero( util::p("10.224.24.1/0"), util::a("0.0.0.0"), util::a("10.224.24.1"), util::a("255.255.255.255"));
+    eight( util::p("10.224.24.1/8"), util::a("10.0.0.0"), util::a("0.224.24.1"), util::a("10.255.255.255"));
+    twentytwo( util::p("10.224.24.1/22"), util::a("10.224.24.0"), util::a("0.0.0.1"), util::a("10.224.27.255"));
+    thirtytwo( util::p("10.224.24.1/32"), util::a("10.224.24.1"), util::a("0.0.0.0"), util::a("10.224.24.1"));
 } }
 
 fn num_addresses(expected: Result<u32>, prefix: util::Prefix) {
