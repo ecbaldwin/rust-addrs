@@ -1,4 +1,6 @@
 impl crate::ipv4::Address for std::net::Ipv4Addr {
+    type UI = u32;
+
     fn octets(&self) -> [u8; 4] {
         self.octets()
     }

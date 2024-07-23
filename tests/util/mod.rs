@@ -26,6 +26,8 @@ pub trait ToArray: Into<[u8; 4]> {}
 impl ToArray for Address {}
 
 impl addrs::ipv4::Address for Address {
+    type UI = u32;
+
     fn octets(&self) -> [u8; 4] {
         self.octets
     }
@@ -156,6 +158,7 @@ impl std::str::FromStr for Prefix {
     }
 }
 
+#[allow(dead_code)]
 pub fn a(s: &str) -> Address {
     s.parse().expect("bad ip")
 }

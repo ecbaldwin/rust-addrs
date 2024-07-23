@@ -21,9 +21,9 @@ pub trait Address:
     + Ord
     + Clone
     + Copy
-    + From<u32>
-    + Into<u32>
-    + From<[u8; 4]>
+    + From<Self::UI>
+    + Into<Self::UI>
+//     + From<[u8; 4]>
 //     + Into<[u8; 4]>
     + std::string::ToString
     + std::str::FromStr
@@ -35,8 +35,14 @@ pub trait Address:
     + Sync
     + Unpin
 {
+    /// the underlying integer type
+    type UI;
+
+    /// constant for the number of bytes in an address
+    const BYTES: u8 = std::mem::size_of::<Self::UI>() as u8;
+
     /// formalize that all v4 address are 32 bits
-    const BITS: u8 = 32;
+    const BITS: u8 = 8 * Self::BYTES;
 
     /// returns the bytes of the address in network order
     ///
@@ -70,7 +76,7 @@ pub trait Address:
 /// different enough from what I wanted that I reimplemented them with trivial wrappers.
 pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// the type of IP address associated with this prefix
-    type Address: Address;
+    type Address: Address<UI = u32>;
 
     /// returns the address part of the Prefix, including host bits
     ///
@@ -126,7 +132,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     /// let prefix: ipnet::Ipv4Net = Prefix::from_address_mask(ip, mask).unwrap();
     /// assert_eq!("8.7.6.5/22", prefix.to_string());
     fn from_address_mask(ip: Self::Address, mask: Self::Address) -> Result<Self> {
-        let mask: u32 = mask.into();
+        let mask: <Self::Address as Address>::UI = mask.into();
         let length = mask.leading_ones() as u8;
         match length + mask.trailing_zeros() as u8 == Self::Address::BITS {
             true => Ok(unsafe { Self::unsafe_new(ip, length) }),
@@ -243,12 +249,12 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     }
 }
 
-impl<T, P> Set for P
+impl<A, P> Set for P
 where
-    T: Address,
-    P: Prefix<Address = T>,
+    A: Address,
+    P: Prefix<Address = A>,
 {
-    type Address = T;
+    type Address = A;
 
     fn num_prefixes(&self, length: u8) -> Result<u32> {
         match length {
@@ -264,7 +270,7 @@ where
         }
     }
 
-    fn contains<P2: Prefix>(&self, other: &P2) -> bool {
+    fn contains<P2: Prefix<Address = A>>(&self, other: &P2) -> bool {
         use prefix_private::{Cmp, PrefixOrd::*};
 
         match self.cmp(other) {
@@ -276,7 +282,7 @@ where
 
 impl<T> Set for RangeInclusive<T>
 where
-    T: Address,
+    T: Address<UI = u32>,
 {
     type Address = T;
 
@@ -313,7 +319,7 @@ where
 
 impl<T> Prefix for T
 where
-    T: Address,
+    T: Address<UI = u32>,
 {
     type Address = T;
 

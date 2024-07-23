@@ -17,10 +17,11 @@ pub trait Cmp<P: super::Prefix> {
     fn cmp(&self, b: &P) -> (PrefixOrd, bool, u8, Option<Child>);
 }
 
-impl<P, T> Cmp<T> for P
+impl<A, P, T> Cmp<T> for P
 where
-    P: super::Prefix,
-    T: super::Prefix,
+    A: super::Address,
+    P: super::Prefix<Address = A>,
+    T: super::Prefix<Address = A>,
 {
     // helper which compares to see if self contains the longer prefix.
     //
@@ -42,8 +43,6 @@ where
     // | Contains | 0..31  | Right | `longer` should be `shorter`'s right child
     // | Same     | 0..32  | None  | `shorter` and `longer` are the same prefix
     fn containership(&self, longer: &T) -> (PrefixOrd, u8, Option<Child>) {
-        use super::Address;
-
         let short: [u8; 4] = self.address().octets();
         let long: [u8; 4] = longer.address().octets();
 
