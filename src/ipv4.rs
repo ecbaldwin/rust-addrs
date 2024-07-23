@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use crate::errors::{Error, Result};
+use crate::{Error, Result};
 
 /// Defines minimum requirements of an ipv4 address for this crate
 ///

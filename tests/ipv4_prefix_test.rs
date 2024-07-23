@@ -1,5 +1,7 @@
-use addrs::errors::Result;
-use addrs::ipv4::{self, Prefix, Set};
+use addrs::{
+    ipv4::{self, Prefix, Set},
+    Result,
+};
 
 mod util;
 
@@ -86,7 +88,7 @@ fn num_addresses(expected: Result<u32>, prefix: util::Prefix) {
 }
 
 runner::tests! { num_addresses {
-    all(Err(addrs::errors::Error::TooMany), util::p("0.0.0.0/0"));
+    all(Err(addrs::Error::TooMany), util::p("0.0.0.0/0"));
     private(Ok(0x00100000), util::p("172.16.0.0/12"));
     host(Ok(1), util::p("172.16.244.117/32"));
 } }
@@ -100,8 +102,8 @@ runner::tests! { num_prefixes {
     too_big(Ok(0), util::p("203.0.113.0/24"), 23);
     size_28(Ok(0x40), util::p("203.0.113.0/24"), 30);
     size_26(Ok(4), util::p("203.0.113.0/24"), 26);
-    bad_length(Err(addrs::errors::Error::InvalidLength), util::p("0.0.0.0/0"), 33);
-    too_many(Err(addrs::errors::Error::TooMany), util::p("0.0.0.0/0"), 32);
+    bad_length(Err(addrs::Error::InvalidLength), util::p("0.0.0.0/0"), 33);
+    too_many(Err(addrs::Error::TooMany), util::p("0.0.0.0/0"), 32);
 } }
 
 fn from_address_length(expected: Result<util::Prefix>, address: util::Address, length: u8) {
@@ -110,7 +112,7 @@ fn from_address_length(expected: Result<util::Prefix>, address: util::Address, l
 
 runner::tests! { from_address_length {
     basic(Ok(util::p("192.168.1.1/24")), util::a("192.168.1.1"), 24);
-    invalid_length(Err(addrs::errors::Error::InvalidLength), util::a("192.168.1.1"), 33);
+    invalid_length(Err(addrs::Error::InvalidLength), util::a("192.168.1.1"), 33);
 } }
 
 fn from_address_mask(expected: Result<util::Prefix>, address: util::Address, mask: util::Address) {
@@ -119,7 +121,7 @@ fn from_address_mask(expected: Result<util::Prefix>, address: util::Address, mas
 
 runner::tests! { from_address_mask {
     basic(Ok(util::p("192.168.1.1/24")), util::a("192.168.1.1"), util::a("255.255.255.0"));
-    invalid_length(Err(addrs::errors::Error::InvalidMask), util::a("192.168.1.1"), util::a("192.168.1.0"));
+    invalid_length(Err(addrs::Error::InvalidMask), util::a("192.168.1.1"), util::a("192.168.1.0"));
 } }
 
 fn halves(expected: Option<(util::Prefix, util::Prefix)>, prefix: util::Prefix) {
