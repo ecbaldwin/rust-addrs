@@ -55,12 +55,6 @@ pub trait Address:
     fn octets(&self) -> [u8; 4];
 }
 
-impl Address for std::net::Ipv4Addr {
-    fn octets(&self) -> [u8; 4] {
-        self.octets()
-    }
-}
-
 /// Defines minimum requirements of an ipv4 prefix for this crate and provides implementations of
 /// new methods.
 ///
@@ -411,22 +405,6 @@ where
     }
 }
 
-impl Prefix for ipnet::Ipv4Net {
-    type Address = std::net::Ipv4Addr;
-
-    fn address(&self) -> Self::Address {
-        self.addr()
-    }
-
-    fn length(&self) -> u8 {
-        self.prefix_len()
-    }
-
-    unsafe fn unsafe_new(ip: Self::Address, length: u8) -> Self {
-        Self::new(ip, length).unwrap_unchecked()
-    }
-}
-
 impl<T> Prefix for T
 where
     T: Address,
@@ -640,3 +618,6 @@ mod test {
             PrefixOrd::Disjoint, 0, Some(Child::Right));
     } }
 }
+
+/// implements traits for external types
+pub mod implementations;
