@@ -95,7 +95,7 @@ mod test {
     use super::super::Prefix;
     use super::*;
 
-    pub fn p(s: &str) -> ipnet::Ipv4Net {
+    fn p(s: &str) -> ipnet::Ipv4Net {
         s.parse().expect("bad prefix")
     }
 

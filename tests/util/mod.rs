@@ -9,6 +9,22 @@ pub struct Address {
     octets: [u8; 4],
 }
 
+impl Address {
+    pub fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self {
+            octets: [a, b, c, d],
+        }
+    }
+
+    pub const LOCALHOST: Address = Address {
+        octets: [127, 0, 0, 1],
+    };
+}
+
+// I want to add this trait bound to the main Address trait
+pub trait ToArray: Into<[u8; 4]> {}
+impl ToArray for Address {}
+
 impl addrs::ipv4::Address for Address {
     fn octets(&self) -> [u8; 4] {
         self.octets
