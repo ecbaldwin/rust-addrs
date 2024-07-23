@@ -76,7 +76,7 @@ pub trait Prefix: Eq + std::str::FromStr + std::string::ToString {
     ///
     /// # Example
     /// ```
-    /// # use addrs::ipv4::{Prefix};
+    /// # use addrs::ipv4::Prefix;
     /// let prefix = "1.2.3.4/24".parse::<ipnet::Ipv4Net>().unwrap();
     /// assert_eq!("1.2.3.4", prefix.address().to_string());
     /// ```
